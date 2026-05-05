@@ -37,7 +37,7 @@ impl Document {
     /// Allocate a new element node and return its id. The node is detached until appended.
     #[must_use]
     pub fn create_element(&mut self, tag: &str) -> u32 {
-        self.arena.alloc(NodeKind::Element { tag: tag.to_string(), attrs: Vec::new() })
+        self.arena.alloc(NodeKind::Element { tag: tag.to_ascii_lowercase(), attrs: Vec::new() })
     }
 
     /// Allocate a new text node and return its id. The node is detached until appended.
@@ -351,11 +351,12 @@ fn copy_node_recursive(
     }
 }
 
-/// Choose a sentinel tag name that does not appear as a close tag in `html`.
+/// Choose a sentinel tag name that does not appear as an opening or closing tag in `html`.
 ///
-/// Starts with `x-frag-sentinel` and appends `-N` suffixes until the candidate's
-/// closing tag (`</candidate>`) is absent from `html` (case-insensitive). This
-/// avoids parser confusion when the input already contains the sentinel close tag.
+/// Starts with `x-frag-sentinel` and appends `-N` suffixes until neither
+/// `<candidate` (opening) nor `</candidate>` (closing) is present in `html`
+/// (case-insensitive). This avoids parser confusion when the input already
+/// contains the sentinel tag in any form.
 fn pick_sentinel(html: &str) -> String {
     let base = "x-frag-sentinel";
     let lower = html.to_ascii_lowercase();
@@ -363,7 +364,7 @@ fn pick_sentinel(html: &str) -> String {
     loop {
         let candidate =
             if n == 0 { base.to_string() } else { format!("{base}-{n}") };
-        if !lower.contains(&format!("</{candidate}>")) {
+        if !lower.contains(&format!("<{candidate}")) && !lower.contains(&format!("</{candidate}>")) {
             return candidate;
         }
         n += 1;

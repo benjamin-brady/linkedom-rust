@@ -363,7 +363,7 @@ fn class_list_contains_on_text_node_returns_not_an_element() {
     assert_eq!(doc.class_list_contains(txt, "x"), Err(DomError::NotAnElement(txt)));
 }
 
-// These two are NEW behaviors (currently set_text_content/set_inner_html accept any node).
+// Review fix: set_text_content/set_inner_html now reject non-element nodes with NotAnElement.
 #[test]
 fn set_text_content_on_text_node_returns_not_an_element() {
     let mut doc = Document::new();
@@ -432,3 +432,30 @@ fn selector_digit_leading_ident_produces_no_match() {
     assert!(hits.is_empty(), "digit-leading id selector must produce no matches, got {hits:?}");
 }
 
+// pick_sentinel must also skip candidates whose *opening* tag appears in the input.
+#[test]
+fn set_inner_html_sentinel_open_tag_collision() {
+    let mut doc = Document::parse("<div></div>");
+    let div = doc.query_selector("div").unwrap();
+    // Input contains an unclosed <x-frag-sentinel> opening tag (no closing tag).
+    // pick_sentinel must fall back to x-frag-sentinel-1 as the wrapper sentinel.
+    // Verify: the fallback sentinel (x-frag-sentinel-1) must not leak into output.
+    let input = "<p>before</p><x-frag-sentinel><p>after</p>";
+    doc.set_inner_html(div, input).unwrap();
+    let inner = doc.get_inner_html(div).unwrap();
+    assert!(inner.contains("<p>before</p>"), "first paragraph missing: {inner}");
+    assert!(inner.contains("<p>after</p>"), "second paragraph missing: {inner}");
+    assert!(!inner.contains("x-frag-sentinel-1"), "algorithm sentinel must not leak into output: {inner}");
+}
+
+// create_element with an uppercase tag name must normalise to lowercase so
+// query_selector("div") can find an element created as create_element("DIV").
+#[test]
+fn create_element_uppercase_normalises_to_lowercase() {
+    let mut doc = Document::new();
+    let el = doc.create_element("DIV");
+    doc.append_child(doc.root_id(), el).unwrap();
+    let found = doc.query_selector("div");
+    assert!(found.is_some(), "query_selector(\"div\") must find element created as create_element(\"DIV\")");
+    assert_eq!(found.unwrap(), el);
+}
