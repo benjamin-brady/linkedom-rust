@@ -10,16 +10,19 @@ pub struct Document {
 }
 
 impl Document {
+    #[must_use]
     pub fn new() -> Self {
         let mut arena = Arena::new();
         let root = arena.alloc(NodeKind::Document);
         Self { arena, root }
     }
 
+    #[must_use]
     pub fn root_id(&self) -> u32 {
         self.root
     }
 
+    #[must_use]
     pub fn node_count(&self) -> usize {
         self.arena.len()
     }

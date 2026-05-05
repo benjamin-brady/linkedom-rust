@@ -12,7 +12,8 @@ impl Arena {
 
     /// Allocate a new node and return its id.
     pub(crate) fn alloc(&mut self, kind: NodeKind) -> u32 {
-        let id = self.nodes.len() as u32;
+        let id = u32::try_from(self.nodes.len())
+            .expect("arena overflow: node count exceeds u32::MAX");
         self.nodes.push(Node::new(kind));
         id
     }
