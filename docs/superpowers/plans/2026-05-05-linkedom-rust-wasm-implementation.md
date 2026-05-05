@@ -206,6 +206,15 @@ git commit -m "feat: add selectors and DOM mutation APIs"
 
 ## Task 5: WASM Exports and TypeScript Wrapper
 
+> **⚠️ Known WASM blocker (must investigate before starting this task):**
+> `cargo build --target wasm32-unknown-unknown` currently fails because `html5ever`
+> transitively pulls in `string_cache` → `parking_lot` → OS-level synchronisation
+> primitives that are unavailable in the wasm32-unknown-unknown target.
+> Task 5 must investigate a resolution before the WASM API can be exposed.
+> Options to evaluate: feature-flag `parking_lot` out of `string_cache`, switch to a
+> `wasm32`-compatible HTML parser (e.g. `lol_html` or a fork of `html5ever` with
+> `parking_lot` disabled), or parse only in native builds and ship a stub for WASM.
+
 **Files:**
 - Modify: `src/lib.rs`
 - Create: `js/package.json`

@@ -2,18 +2,40 @@ use linkedom_rust::{Document, DomError};
 
 #[test]
 fn parses_and_serializes_html() {
-    let doc = Document::parse("<main><h1>Hello</h1><img src=\"/x.png\"></main>").unwrap();
-    assert!(doc.serialize().contains("<main>"));
-    assert!(doc.serialize().contains("<h1>Hello</h1>"));
-    assert!(doc.serialize().contains("<img src=\"/x.png\">"));
+    let doc = Document::parse("<main><h1>Hello</h1><img src=\"/x.png\"></main>");
+    let html = doc.serialize();
+    assert!(html.contains("<main>"));
+    assert!(html.contains("<h1>Hello</h1>"));
+    assert!(html.contains("<img src=\"/x.png\">"));
 }
 
 #[test]
 fn serializes_text_escaping() {
-    let doc = Document::parse("<p>a &amp; b &lt;c&gt;</p>").unwrap();
+    let doc = Document::parse("<p>a &amp; b &lt;c&gt;</p>");
     let html = doc.serialize();
     // html5ever decodes entities to raw chars; serializer must re-encode them
     assert!(html.contains("a &amp; b &lt;c&gt;"));
+}
+
+#[test]
+fn serializes_attr_lt_escaped() {
+    let doc = Document::parse("<img alt=\"a<b\">");
+    let html = doc.serialize();
+    assert!(html.contains("alt=\"a&lt;b\""), "< in attr values must be escaped, got: {html}");
+}
+
+#[test]
+fn doctype_round_trip() {
+    let doc = Document::parse("<!DOCTYPE html><html><head></head><body></body></html>");
+    let html = doc.serialize();
+    assert!(html.contains("<!DOCTYPE html>"), "doctype must survive round-trip, got: {html}");
+}
+
+#[test]
+fn comment_round_trip() {
+    let doc = Document::parse("<div><!-- my comment --></div>");
+    let html = doc.serialize();
+    assert!(html.contains("<!-- my comment -->"), "comment must survive round-trip, got: {html}");
 }
 
 #[test]

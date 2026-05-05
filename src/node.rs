@@ -11,7 +11,6 @@ pub(crate) enum NodeKind {
 /// A single node in the arena.
 #[derive(Debug, Clone)]
 pub(crate) struct Node {
-    #[allow(dead_code)]
     pub(crate) kind: NodeKind,
     pub(crate) parent: Option<u32>,
     pub(crate) first_child: Option<u32>,

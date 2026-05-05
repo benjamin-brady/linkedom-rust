@@ -15,7 +15,7 @@ fn escape_text(s: &str) -> String {
 }
 
 fn escape_attr(s: &str) -> String {
-    s.replace('&', "&amp;").replace('"', "&quot;")
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('"', "&quot;")
 }
 
 pub(crate) fn serialize_document(arena: &Arena, root_id: u32) -> String {
@@ -57,6 +57,8 @@ fn serialize_node(arena: &Arena, id: u32, out: &mut String) {
         }
         NodeKind::Text { data } => out.push_str(&escape_text(&data)),
         NodeKind::Comment { data } => {
+            // Comment data is stored verbatim from the parser. The HTML spec
+            // forbids "-->" inside a comment, so no further escaping is needed.
             out.push_str("<!--");
             out.push_str(&data);
             out.push_str("-->");

@@ -9,7 +9,7 @@ use html5ever::{
     Attribute, QualName,
 };
 
-use crate::{node::NodeKind, Document, DomError};
+use crate::{node::NodeKind, Document};
 
 /// TreeSink backed by our arena Document, using RefCell for interior mutability
 /// (html5ever 0.39+ requires all TreeSink methods to take `&self`).
@@ -221,6 +221,8 @@ impl TreeSink for DomSink {
     }
 
     fn create_pi(&self, _target: StrTendril, _data: StrTendril) -> Self::Handle {
+        // Processing instructions are rare in HTML5 documents; fall back to an
+        // empty comment node so the tree structure is preserved without data loss.
         self.document
             .borrow_mut()
             .alloc_node(NodeKind::Comment { data: String::new() })
@@ -339,8 +341,7 @@ impl TreeSink for DomSink {
     }
 }
 
-pub(crate) fn parse_html(html: &str) -> Result<Document, DomError> {
+pub(crate) fn parse_html(html: &str) -> Document {
     let sink = DomSink::new();
-    let doc = parse_document(sink, Default::default()).one(html);
-    Ok(doc)
+    parse_document(sink, Default::default()).one(html)
 }

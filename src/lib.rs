@@ -1,7 +1,7 @@
 mod arena;
 mod node;
-pub mod parser;
-pub mod serialize;
+mod parser;
+mod serialize;
 pub(crate) mod tree;
 
 use arena::Arena;
@@ -90,8 +90,10 @@ impl Document {
         tree::parent_of(&self.arena, node)
     }
 
-    /// Parse an HTML string into a Document.
-    pub fn parse(html: &str) -> Result<Document, DomError> {
+    /// Parse an HTML string into a Document. html5ever is a forgiving HTML
+    /// parser that never fails, so this is infallible.
+    #[must_use]
+    pub fn parse(html: &str) -> Document {
         parser::parse_html(html)
     }
 
