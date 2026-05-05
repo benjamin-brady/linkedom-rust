@@ -213,7 +213,10 @@ export class Element {
     return this.#raw.getTextContent(this.#nodeId);
   }
 
-  set textContent(value: string) {
+  set textContent(value: string | undefined) {
+    if (value === undefined) {
+      throw new TypeError("textContent cannot be set to undefined");
+    }
     this.#raw.setTextContent(this.#nodeId, value);
   }
 
@@ -221,7 +224,10 @@ export class Element {
     return this.#raw.getInnerHtml(this.#nodeId);
   }
 
-  set innerHTML(value: string) {
+  set innerHTML(value: string | undefined) {
+    if (value === undefined) {
+      throw new TypeError("innerHTML cannot be set to undefined");
+    }
     this.#raw.setInnerHtml(this.#nodeId, value);
   }
 
