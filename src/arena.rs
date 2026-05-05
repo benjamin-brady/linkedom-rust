@@ -22,10 +22,18 @@ impl Arena {
         self.nodes.len()
     }
 
-    // Required to satisfy clippy::len_without_is_empty; not yet called in Task 1.
+    // Required to satisfy clippy::len_without_is_empty; not called in Task 2.
     #[allow(dead_code)]
     pub(crate) fn is_empty(&self) -> bool {
         self.nodes.is_empty()
+    }
+
+    pub(crate) fn get(&self, id: u32) -> Option<&Node> {
+        self.nodes.get(id as usize)
+    }
+
+    pub(crate) fn get_mut(&mut self, id: u32) -> Option<&mut Node> {
+        self.nodes.get_mut(id as usize)
     }
 }
 
