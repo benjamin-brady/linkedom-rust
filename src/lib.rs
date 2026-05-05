@@ -5,6 +5,7 @@ mod parser;
 mod selector;
 mod serialize;
 pub(crate) mod tree;
+pub mod wasm;
 
 use arena::Arena;
 use node::NodeKind;
