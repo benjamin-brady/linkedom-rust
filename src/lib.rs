@@ -5,7 +5,19 @@ mod parser;
 mod selector;
 mod serialize;
 pub(crate) mod tree;
+/// WASM-facing API — only compiled and exported for `wasm32` targets.
+/// On native builds this module is absent from the public API, keeping the
+/// native Rust interface clean of wasm-bindgen types.
+///
+/// During `cargo test` on native hosts the module is compiled (but not
+/// publicly exported) so that the shim delegation tests in `wasm.rs` can
+/// still exercise the wrapper layer.
+#[cfg(target_arch = "wasm32")]
 pub mod wasm;
+
+// Compile (but do not export) the WASM shim for native unit-test runs.
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod wasm;
 
 use arena::Arena;
 use node::NodeKind;

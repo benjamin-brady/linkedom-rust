@@ -33,6 +33,14 @@
  *
  * wasm-bindgen generates camelCase JS names from the Rust `#[wasm_bindgen(js_name = …)]`
  * annotations in `src/wasm.rs`.  Node ids are plain JS numbers.
+ *
+ * ## Fallible methods
+ *
+ * Rust methods that return `Result<T, JsValue>` are exposed here with return type `T`
+ * (e.g., `void` for `Result<(), …>`, `boolean` for `Result<bool, …>`).
+ * wasm-bindgen converts the `Err` variant into a thrown JavaScript `Error`, so callers
+ * receive the success value directly and errors propagate as exceptions — matching the
+ * browser DOM convention.  There is no `| never` union; exceptions are the JS idiom.
  */
 interface IRawDocument {
   // serialisation
