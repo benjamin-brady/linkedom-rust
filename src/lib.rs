@@ -1,6 +1,6 @@
 mod arena;
 mod node;
-pub mod tree;
+pub(crate) mod tree;
 
 use arena::Arena;
 use node::NodeKind;
@@ -30,6 +30,7 @@ impl Document {
     }
 
     /// Allocate a new element node and return its id. The node is detached until appended.
+    #[must_use]
     pub fn create_element(&mut self, tag: &str) -> u32 {
         self.arena.alloc(NodeKind::Element { tag: tag.to_string() })
     }
@@ -45,8 +46,11 @@ impl Document {
     }
 
     /// Return the ordered list of direct children of `node`.
+    ///
+    /// Returns `None` if `node` does not exist in the arena.
+    /// Returns `Some(vec![])` for a valid node with no children.
     #[must_use]
-    pub fn children(&self, node: u32) -> Vec<u32> {
+    pub fn children(&self, node: u32) -> Option<Vec<u32>> {
         tree::children(&self.arena, node)
     }
 

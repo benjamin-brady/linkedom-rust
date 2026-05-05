@@ -44,22 +44,23 @@ pub(crate) fn append_child(
     if child_id == root_id {
         return Err(DomError::CannotAppendRoot);
     }
-    if arena.get(child_id).unwrap().parent.is_some() {
+    if arena.get(child_id).expect("invariant: child_id valid after guard").parent.is_some() {
         return Err(DomError::AlreadyAttached);
     }
 
     // Read parent state before taking mutable refs.
-    let last_child = arena.get(parent_id).unwrap().last_child;
-    let first_child = arena.get(parent_id).unwrap().first_child;
+    let parent_node = arena.get(parent_id).expect("invariant: parent_id valid after guard");
+    let last_child = parent_node.last_child;
+    let first_child = parent_node.first_child;
 
     // Wire previous tail's forward link.
     if let Some(prev_id) = last_child {
-        arena.get_mut(prev_id).unwrap().next_sibling = Some(child_id);
+        arena.get_mut(prev_id).expect("invariant: prev sibling id is valid").next_sibling = Some(child_id);
     }
 
     // Wire child's back-links.
     {
-        let child = arena.get_mut(child_id).unwrap();
+        let child = arena.get_mut(child_id).expect("invariant: child_id valid after guard");
         child.parent = Some(parent_id);
         child.prev_sibling = last_child;
         child.next_sibling = None;
@@ -67,7 +68,7 @@ pub(crate) fn append_child(
 
     // Update parent's child pointers.
     {
-        let parent = arena.get_mut(parent_id).unwrap();
+        let parent = arena.get_mut(parent_id).expect("invariant: parent_id valid after guard");
         if first_child.is_none() {
             parent.first_child = Some(child_id);
         }
@@ -91,21 +92,22 @@ pub(crate) fn remove_node(
     }
 
     // Snapshot links before any mutation.
-    let parent = arena.get(node_id).unwrap().parent;
-    let prev = arena.get(node_id).unwrap().prev_sibling;
-    let next = arena.get(node_id).unwrap().next_sibling;
+    let node_snap = arena.get(node_id).expect("invariant: node_id valid after guard");
+    let parent = node_snap.parent;
+    let prev = node_snap.prev_sibling;
+    let next = node_snap.next_sibling;
 
     // Stitch siblings together.
     if let Some(prev_id) = prev {
-        arena.get_mut(prev_id).unwrap().next_sibling = next;
+        arena.get_mut(prev_id).expect("invariant: prev sibling id is valid").next_sibling = next;
     }
     if let Some(next_id) = next {
-        arena.get_mut(next_id).unwrap().prev_sibling = prev;
+        arena.get_mut(next_id).expect("invariant: next sibling id is valid").prev_sibling = prev;
     }
 
     // Fix parent's first/last child pointers.
     if let Some(parent_id) = parent {
-        let p = arena.get_mut(parent_id).unwrap();
+        let p = arena.get_mut(parent_id).expect("invariant: parent id is valid");
         if p.first_child == Some(node_id) {
             p.first_child = next;
         }
@@ -115,7 +117,7 @@ pub(crate) fn remove_node(
     }
 
     // Clear the detached node's tree links.
-    let n = arena.get_mut(node_id).unwrap();
+    let n = arena.get_mut(node_id).expect("invariant: node_id valid after guard");
     n.parent = None;
     n.prev_sibling = None;
     n.next_sibling = None;
@@ -123,18 +125,16 @@ pub(crate) fn remove_node(
     Ok(())
 }
 
-/// Return an ordered list of direct children of `node_id`.
-pub(crate) fn children(arena: &Arena, node_id: u32) -> Vec<u32> {
+/// Return an ordered list of direct children of `node_id`, or `None` if the node does not exist.
+pub(crate) fn children(arena: &Arena, node_id: u32) -> Option<Vec<u32>> {
+    let node = arena.get(node_id)?;
     let mut result = Vec::new();
-    let Some(node) = arena.get(node_id) else {
-        return result;
-    };
     let mut cursor = node.first_child;
     while let Some(id) = cursor {
         result.push(id);
-        cursor = arena.get(id).unwrap().next_sibling;
+        cursor = arena.get(id).expect("invariant: child id stored in sibling link is valid").next_sibling;
     }
-    result
+    Some(result)
 }
 
 /// Return the parent id of `node_id`, or `None` if detached.
