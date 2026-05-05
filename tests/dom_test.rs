@@ -1,6 +1,22 @@
 use linkedom_rust::{Document, DomError};
 
 #[test]
+fn parses_and_serializes_html() {
+    let doc = Document::parse("<main><h1>Hello</h1><img src=\"/x.png\"></main>").unwrap();
+    assert!(doc.serialize().contains("<main>"));
+    assert!(doc.serialize().contains("<h1>Hello</h1>"));
+    assert!(doc.serialize().contains("<img src=\"/x.png\">"));
+}
+
+#[test]
+fn serializes_text_escaping() {
+    let doc = Document::parse("<p>a &amp; b &lt;c&gt;</p>").unwrap();
+    let html = doc.serialize();
+    // html5ever decodes entities to raw chars; serializer must re-encode them
+    assert!(html.contains("a &amp; b &lt;c&gt;"));
+}
+
+#[test]
 fn append_child_invalid_parent_returns_error() {
     let mut doc = Document::new();
     let child = doc.create_element("div");

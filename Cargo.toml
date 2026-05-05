@@ -8,3 +8,7 @@ edition = "2021"
 [lib]
 name = "linkedom_rust"
 path = "src/lib.rs"
+
+[dependencies]
+html5ever = "0.39.0"
+markup5ever = "0.39.0"

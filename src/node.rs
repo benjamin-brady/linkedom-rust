@@ -2,12 +2,9 @@
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum NodeKind {
     Document,
-    #[allow(dead_code)]
-    DocumentType { name: String },
-    Element { tag: String },
-    #[allow(dead_code)]
+    DocumentType { name: String, public_id: String, system_id: String },
+    Element { tag: String, attrs: Vec<(String, String)> },
     Text { data: String },
-    #[allow(dead_code)]
     Comment { data: String },
 }
 
