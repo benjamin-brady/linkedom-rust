@@ -204,28 +204,75 @@ git add src tests
 git commit -m "feat: add selectors and DOM mutation APIs"
 ```
 
-## Task 5: WASM Exports and TypeScript Wrapper
+## Task 5: WASM Exports and TypeScript Wrapper ✅
+
+> **⚠️ WASM build blocker — setup requirement for any build machine:**
+>
+> `cargo build --target wasm32-unknown-unknown` fails on this machine because
+> this machine uses Homebrew's `rustc`/`cargo` without `rustup`, so the
+> `wasm32-unknown-unknown` target stdlib is not installed.  The error is:
+>
+> ```
+> error[E0463]: can't find crate for `core`
+>   = note: the `wasm32-unknown-unknown` target may not be installed
+>   = help: consider downloading the target with `rustup target add wasm32-unknown-unknown`
+> ```
+>
+> **To build WASM on a properly configured machine:**
+> 1. Install rustup: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+> 2. `rustup target add wasm32-unknown-unknown`
+> 3. Install wasm-pack: `cargo install wasm-pack`
+> 4. `wasm-pack build --target web --out-dir pkg`
+>
+> **Additional investigation needed once target is installed:**
+> `html5ever` pulls in `string_cache` → `parking_lot` which uses OS-level
+> synchronisation primitives.  Investigate whether `parking_lot` can be
+> feature-gated out of `string_cache` for wasm32 targets, or whether a
+> wasm32-compatible HTML parser (e.g. `lol_html`) should be substituted.
+> Do NOT attempt to resolve this parser compatibility in Task 5.
 
 **Files:**
-- Modify: `src/lib.rs`
-- Create: `js/package.json`
-- Create: `js/index.ts`
-- Test: `cargo test`
+- Modify: `Cargo.toml` — added `wasm-bindgen = "0.2"`, `crate-type = ["cdylib", "rlib"]`, release size opts
+- Modify: `src/lib.rs` — added `pub mod wasm;`
+- Create: `src/wasm.rs` — `WasmDocument` with all required `#[wasm_bindgen]` methods + 11 native tests
+- Create: `js/package.json` — package metadata and build scripts
+- Create: `js/index.ts` — `Document`, `Element`, `ClassList` TypeScript wrapper classes
 
-- [ ] **Step 1: Write wasm-facing API**
+- [x] **Step 1: Write wasm-facing API**
 
-Expose `WasmDocument` with `parse_html`, `query_selector`, `query_selector_all`, attributes, textContent, innerHTML, createElement, createTextNode, appendChild, remove, children, classList, and serialize.
+`WasmDocument` in `src/wasm.rs` exposes: `parseHtml`, `serialize`, `rootId`,
+`querySelector`, `querySelectorAll`, `createElement`, `createTextNode`,
+`appendChild`, `remove`, `children`, `getAttribute`, `setAttribute`,
+`removeAttribute`, `getTextContent`, `setTextContent`, `getInnerHtml`,
+`setInnerHtml`, `classListAdd`, `classListRemove`, `classListContains`.
 
-- [ ] **Step 2: Write TypeScript wrapper**
+Errors from the core Rust API (`DomError`) are converted to `JsValue` strings
+so wasm-bindgen throws them as JavaScript errors.
 
-Create `Document`, `Element`, and `ClassList` classes that call the flat WASM APIs and hide numeric handles from consumers.
+> **Note on native error-path tests:** `#[wasm_bindgen]` methods returning
+> `Result<_, JsValue>` call `wasm_bindgen::throw_val` on error which invokes
+> `libc::abort()` in non-WASM builds.  Only success-path tests are run
+> natively; error paths are covered by the equivalent `Document` tests in
+> `tests/dom_test.rs`.
 
-- [ ] **Step 3: Run Rust tests**
+- [x] **Step 2: Write TypeScript wrapper**
+
+`js/index.ts` exports:
+- `init(wasmPath?)` — async WASM initialiser (Worker/ESM-friendly dynamic import)
+- `Document` — `parse`, `serialize`, `createElement`, `createTextNode`, `querySelector`, `querySelectorAll`, `appendChild`, `removeChild`
+- `Element` — `getAttribute`, `setAttribute`, `removeAttribute`, `textContent`, `innerHTML`, `classList`, `children`, `append`, `remove`
+- `ClassList` — `add`, `remove`, `contains`
+
+- [x] **Step 3: Run Rust tests**
 
 Run: `cargo test`
-Expected: PASS.
+Result: **70 tests pass** (11 new `wasm::tests`, 9 `selector::tests`, 49 integration, 1 doc test).
 
-- [ ] **Step 4: Commit**
+`cargo clippy -- -D warnings`: **clean**.
+
+`cargo build --target wasm32-unknown-unknown --release`: **expected failure** — target stdlib missing (Homebrew rustc, no rustup).
+
+- [x] **Step 4: Commit**
 
 ```bash
 git add Cargo.toml src js

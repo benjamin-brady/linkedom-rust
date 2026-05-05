@@ -1,87 +1,159 @@
 # linkedom-rust
 
-A Rust + WebAssembly DOM library for environments where running JavaScript DOM libraries is awkward — primarily Cloudflare Workers.
+A Rust/WebAssembly DOM implementation designed for [Cloudflare Workers], inspired by
+the data-structure trade-offs in [linkedom] (flat arena storage, numeric node ids,
+O(1) node removal).
 
-> **Status:** Early work-in-progress. Design and plan are written; implementation is in progress. Not yet usable. Expect breaking changes and missing pieces.
+## Purpose
 
-## Why
+Parse, query, and manipulate HTML server-side using the same mental model as the
+browser DOM — without shipping a full JS HTML parser to every edge Worker.  The
+project provides:
 
-[linkedom](https://github.com/WebReflection/linkedom) is a great pure-JS DOM implementation, but it doesn't run reliably inside the Cloudflare Workers runtime. I parse Wikipedia HTML inside Workers for [Redactle](https://redactle.net) and wanted a DOM library that:
+| Layer | Path | Description |
+|---|---|---|
+| Rust DOM | `src/` | Arena-based tree, CSS selector engine, html5ever parser, serialiser |
+| WASM shim | `src/wasm.rs` | `wasm-bindgen` exports; only compiled for `wasm32` targets |
+| TS wrapper | `js/index.ts` | Ergonomic `Document`/`Element`/`ClassList` hiding raw node ids |
+| Worker example | `worker-example/` | Cloudflare Worker that strips boilerplate from a Wikipedia page |
 
-- Parses real-world (often malformed) HTML correctly
-- Supports CSS selectors (`querySelector` / `querySelectorAll`)
-- Allows mutation: remove, modify attributes, create nodes, etc.
-- Serializes back to HTML
-- Works inside the Workers runtime without compatibility headaches
+## Status and Limitations
 
-A Rust crate compiled to WASM is a natural fit — and a good excuse to learn Rust on a non-trivial codebase.
+- **Native Rust layer** — fully implemented and tested.  All 49 tests pass.
+- **WASM shim** — written and type-checked; correct by inspection.
+- **Local WASM build** — blocked: `wasm32-unknown-unknown` stdlib requires
+  `rustup` (or an equivalent toolchain manager).  The project Homebrew `rustc`
+  does not include it.  See [WASM build](#wasm-build) below.
+- **html5ever / string_cache / parking_lot WASM compatibility** — not yet
+  validated.  These crates are widely used in WASM contexts but must be
+  confirmed once the target is installed.
+- **Cloudflare Workers runtime** — not yet proven end-to-end; `worker-example/`
+  is provided as a reference implementation pending a successful WASM build.
 
-## Approach
+## Verification
 
-- **Arena-backed DOM.** Nodes live in a flat `Vec<Node>` and reference each other by `u32` indices (parent, first/last child, prev/next sibling). This preserves linkedom's O(1) mutation performance while sidestepping Rust ownership pain on a graph-shaped data structure.
-- **Parsing:** [`html5ever`](https://crates.io/crates/html5ever) (Mozilla/Servo) for spec-compliant HTML5 parsing.
-- **Selectors:** a focused selector engine targeting the cases I actually need (tag, id, class, attribute, descendant and child combinators, comma groups). Larger selector support can come later via [`selectors`](https://crates.io/crates/selectors) if needed.
-- **WASM boundary:** a flat `wasm-bindgen` API surface using opaque `u32` node handles, with a small TypeScript wrapper that gives the JS side an ergonomic DOM-like API.
+### Rust
 
-### Performance targets
+```sh
+cargo test
+cargo clippy -- -D warnings
+```
 
-| Operation         | Complexity |
-| ----------------- | ---------- |
-| `appendChild`     | O(1)       |
-| `removeChild`     | O(1)       |
-| `insertBefore`    | O(1)       |
-| `querySelector`   | O(n)       |
-| `querySelectorAll`| O(n)       |
-| `getAttribute`    | O(a)       |
-| `serialize`       | O(n)       |
+### TypeScript
 
-## Project layout
+```sh
+cd js && npm run typecheck
+```
+
+Both commands pass on the current HEAD without a WASM build.
+
+## WASM Build
+
+**Intended path** (requires rustup + wasm-pack):
+
+```sh
+# 1. Install the WASM target (one-time)
+rustup target add wasm32-unknown-unknown
+
+# 2. Build the WASM package
+cd js && npm run build:wasm
+# Equivalent: wasm-pack build .. --target web --out-dir ../pkg
+```
+
+**Current blocker** — The machine running this project uses a Homebrew-installed
+`rustc` which does not support `rustup target add`.  Until the WASM target stdlib
+is available, `cargo build --target wasm32-unknown-unknown` will fail with a
+`can't find crate for std` error.  Installing `rustup` (https://rustup.rs) and
+re-running the commands above will resolve this.
+
+## Rust Usage
+
+```rust
+use linkedom_rust::Document;
+
+// Parse
+let mut doc = Document::parse(r#"
+  <html>
+    <body>
+      <nav id="nav">…</nav>
+      <article>
+        <img src="photo.jpg" alt="A photo">
+        <img src="logo.png" alt="Logo">
+      </article>
+      <footer id="footer">…</footer>
+    </body>
+  </html>
+"#);
+
+// Collect image srcs
+let img_ids = doc.query_selector_all("img");
+let srcs: Vec<String> = img_ids
+    .iter()
+    .filter_map(|&id| doc.get_attribute(id, "src"))
+    .collect();
+
+// Remove navigation chrome
+for selector in &["nav", "footer", "aside", "#sidebar"] {
+    if let Some(id) = doc.query_selector(selector) {
+        doc.remove(id).ok();
+    }
+}
+
+// Serialise cleaned document
+let html = doc.serialize();
+```
+
+## TypeScript / Worker Usage
+
+```ts
+import { init, Document } from '@linkedom-rust/dom';
+
+// ⚠ Requires a successful `npm run build:wasm` first.
+await init();
+
+const doc = Document.parse('<html><body><img src="a.jpg"><nav>…</nav></body></html>');
+
+// Collect image srcs
+const imgs = doc.querySelectorAll('img');
+const srcs = imgs.map(el => el.getAttribute('src')).filter(Boolean);
+
+// Strip navigation chrome
+for (const sel of ['nav', 'footer', 'aside', '#sidebar']) {
+  doc.querySelectorAll(sel).forEach(el => el.remove());
+}
+
+// Serialise
+console.log(doc.serialize());
+```
+
+See [`worker-example/src/index.ts`](worker-example/src/index.ts) for a full
+Cloudflare Worker implementation.
+
+## Project Structure
 
 ```
 src/
-  arena.rs       arena storage and node lookup
-  node.rs        Node, NodeData, ElementData
-  tree.rs        O(1) tree mutation / traversal
-  parser.rs      html5ever tree sink integration
-  selector.rs    selector parser and matcher
-  serialize.rs   HTML serialization + escaping
-  class_list.rs  class attribute manipulation
-  lib.rs         public Document API + wasm-bindgen exports
-js/              TypeScript wrapper package
-worker-example/  Cloudflare Workers example
-tests/           cargo tests
-docs/            design + implementation plan
+  lib.rs          # Public Rust API + Document
+  arena.rs        # Flat node arena (Vec<Node>)
+  node.rs         # NodeKind enum (Document, Element, Text, …)
+  tree.rs         # append_child, remove_node, traversal helpers
+  parser.rs       # html5ever-based HTML parser
+  selector.rs     # CSS selector engine (element, class, id, attribute, combinator)
+  serialize.rs    # HTML serialiser
+  class_list.rs   # classList helpers
+  wasm.rs         # wasm-bindgen shim (wasm32 only)
+js/
+  index.ts        # TypeScript wrapper (Document, Element, ClassList)
+  package.json
+  tsconfig.json
+pkg/
+  linkedom_rust.d.ts  # Type stub (placeholder until wasm-pack generates the real one)
+worker-example/
+  wrangler.toml   # Cloudflare Worker config
+  src/index.ts    # Worker implementation
+tests/
+  dom_test.rs     # Integration tests
 ```
 
-## Building
-
-Requires Rust (stable) and [`wasm-pack`](https://rustwasm.github.io/wasm-pack/installer/).
-
-```bash
-# Run native tests
-cargo test
-
-# Build the WASM package
-wasm-pack build --target web
-```
-
-## Status checklist
-
-- [ ] Arena and core node types
-- [ ] HTML parsing (html5ever integration)
-- [ ] Tree mutation API
-- [ ] CSS selector engine (subset)
-- [ ] HTML serialization
-- [ ] `wasm-bindgen` API surface
-- [ ] TypeScript wrapper
-- [ ] Cloudflare Workers example
-- [ ] Benchmarks vs linkedom
-
-## Notes
-
-- This is a personal learning project. The design and architecture are mine; a fair amount of the Rust code is AI-assisted, with my role focused on architecture, review, and learning idiomatic Rust patterns.
-- See [docs/superpowers/specs/](docs/superpowers/specs/) for the full design and [docs/superpowers/plans/](docs/superpowers/plans/) for the implementation plan.
-
-## License
-
-MIT (planned).
+[linkedom]: https://github.com/WebReflection/linkedom
+[Cloudflare Workers]: https://workers.cloudflare.com/

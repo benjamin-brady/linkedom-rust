@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    // Target modern JS runtimes; compatible with Web Workers and ESM bundlers.
+    "target": "ES2020",
+    "module": "ES2020",
+    "moduleResolution": "node",
+    // Include Worker globals alongside DOM-lite types.
+    "lib": ["ES2020", "WebWorker"],
+    // Strict mode for reliable type checking.
+    "strict": true,
+    // Declaration output is enabled; outDir is supplied by the build script CLI flag
+    // (`tsc --declaration --outDir .`) to avoid TypeScript auto-excluding the source
+    // directory when outDir equals the project root.
+    "declaration": true
+  },
+  "include": ["index.ts"]
+}

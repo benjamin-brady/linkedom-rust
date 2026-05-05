@@ -1,2 +1,11 @@
 
 .worktrees/
+target/
+doc/
+# Library crate: Cargo.lock is not committed per Rust convention for libraries.
+Cargo.lock
+# JS package artefacts — node_modules must never be committed.
+js/node_modules/
+# package-lock.json for this library package: ignored so consumers pin their
+# own versions (consistent with omitting Cargo.lock for library crates).
+js/package-lock.json
