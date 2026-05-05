@@ -116,7 +116,7 @@ impl Document {
     /// Return the first element in document order that matches `selector`, or `None`.
     #[must_use]
     pub fn query_selector(&self, selector: &str) -> Option<u32> {
-        selector::query_all(&self.arena, self.root, selector).into_iter().next()
+        selector::query_first(&self.arena, self.root, selector)
     }
 
     /// Return all elements in document order that match `selector`.
@@ -191,9 +191,20 @@ impl Document {
     }
 
     /// Replace all children of `node` with a single text node containing `text`.
+    ///
+    /// Returns `Err(DomError::NotAnElement)` for non-element nodes (Text, Comment,
+    /// DocumentType, Document are all rejected).
+    ///
+    /// # NOTE: arena growth
+    ///
+    /// The arena is append-only; detached child nodes are unlinked but their slots are
+    /// never freed. Repeated calls to `set_text_content` on the same node grow the arena
+    /// permanently. If unbounded mutation is required, construct a fresh `Document`.
     pub fn set_text_content(&mut self, node: u32, text: &str) -> Result<(), DomError> {
-        if self.arena.get(node).is_none() {
-            return Err(DomError::InvalidNode(node));
+        match self.arena.get(node).map(|n| &n.kind) {
+            None => return Err(DomError::InvalidNode(node)),
+            Some(NodeKind::Element { .. }) => {}
+            Some(_) => return Err(DomError::NotAnElement(node)),
         }
         let children = tree::children(&self.arena, node).unwrap_or_default();
         for child_id in children {
@@ -213,22 +224,36 @@ impl Document {
 
     /// Replace all children of `node` with the result of parsing `html` as a fragment.
     ///
-    /// Implemented by wrapping `html` in a temporary `<div>` element, parsing the full
-    /// document, finding that div, and copying its children into `node`.
+    /// Returns `Err(DomError::NotAnElement)` for non-element nodes.
+    ///
+    /// # Implementation
+    ///
+    /// Wraps `html` in a temporary sentinel custom element, parses the full document,
+    /// and copies the sentinel's children into `node`. The sentinel tag name is chosen
+    /// to avoid colliding with any close tag already present in `html`.
+    ///
+    /// # NOTE: arena growth
+    ///
+    /// The arena is append-only; removed children are unlinked but never freed.
+    /// Repeated calls grow the arena permanently. Construct a fresh `Document` if
+    /// unbounded mutation is required.
     pub fn set_inner_html(&mut self, node: u32, html: &str) -> Result<(), DomError> {
-        if self.arena.get(node).is_none() {
-            return Err(DomError::InvalidNode(node));
+        match self.arena.get(node).map(|n| &n.kind) {
+            None => return Err(DomError::InvalidNode(node)),
+            Some(NodeKind::Element { .. }) => {}
+            Some(_) => return Err(DomError::NotAnElement(node)),
         }
         // Remove existing children.
         let children = tree::children(&self.arena, node).unwrap_or_default();
         for child_id in children {
             tree::remove_node(&mut self.arena, child_id, self.root)?;
         }
-        // Parse the fragment wrapped in a unique sentinel element.
-        let wrapped = format!("<x-frag-sentinel>{html}</x-frag-sentinel>");
+        // Choose a sentinel tag that does not appear as a close tag in the input.
+        let sentinel = pick_sentinel(html);
+        let wrapped = format!("<{sentinel}>{html}</{sentinel}>");
         let frag_doc = parser::parse_html(&wrapped);
         // Find the sentinel element in the parsed document.
-        let sentinels = selector::query_all(&frag_doc.arena, frag_doc.root, "x-frag-sentinel");
+        let sentinels = selector::query_all(&frag_doc.arena, frag_doc.root, &sentinel);
         if let Some(&sentinel_id) = sentinels.first() {
             copy_subtree_children(&frag_doc, sentinel_id, &mut self.arena, node, self.root);
         }
@@ -315,7 +340,8 @@ fn copy_node_recursive(
         None => return,
     };
     let new_id = dst_arena.alloc(kind);
-    let _ = tree::append_child(dst_arena, dst_parent, new_id, dst_root);
+    tree::append_child(dst_arena, dst_parent, new_id, dst_root)
+        .expect("invariant: copy_node_recursive dst_parent and new_id are valid arena ids");
 
     let mut cursor = first_child;
     while let Some(child_id) = cursor {
@@ -325,3 +351,21 @@ fn copy_node_recursive(
     }
 }
 
+/// Choose a sentinel tag name that does not appear as a close tag in `html`.
+///
+/// Starts with `x-frag-sentinel` and appends `-N` suffixes until the candidate's
+/// closing tag (`</candidate>`) is absent from `html` (case-insensitive). This
+/// avoids parser confusion when the input already contains the sentinel close tag.
+fn pick_sentinel(html: &str) -> String {
+    let base = "x-frag-sentinel";
+    let lower = html.to_ascii_lowercase();
+    let mut n: u32 = 0;
+    loop {
+        let candidate =
+            if n == 0 { base.to_string() } else { format!("{base}-{n}") };
+        if !lower.contains(&format!("</{candidate}>")) {
+            return candidate;
+        }
+        n += 1;
+    }
+}

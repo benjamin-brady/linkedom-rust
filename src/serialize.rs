@@ -37,12 +37,6 @@ pub(crate) fn serialize_inner_html(arena: &Arena, node_id: u32) -> Option<String
     Some(out)
 }
 
-/// Serialize a single node subtree into `out`.
-#[allow(dead_code)]
-pub(crate) fn serialize_subtree(arena: &Arena, node_id: u32, out: &mut String) {
-    serialize_node(arena, node_id, out);
-}
-
 fn serialize_node(arena: &Arena, id: u32, out: &mut String) {
     let (kind, first_child) = {
         let node = arena.get(id).expect("serialize_node: invalid id");

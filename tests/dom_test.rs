@@ -318,3 +318,117 @@ fn attribute_selector_queries() {
     assert_eq!(exact.len(), 1);
 }
 
+// ── Task 4 code-review fixes ──────────────────────────────────────────────────
+
+// Characterization tests: set_attribute/remove_attribute/class_list already return
+// NotAnElement for real non-element nodes (Text). Verified here with actual Text nodes.
+#[test]
+fn set_attribute_on_text_node_returns_not_an_element() {
+    let mut doc = Document::new();
+    let div = doc.create_element("div");
+    doc.append_child(doc.root_id(), div).unwrap();
+    let txt = doc.create_text_node("hello");
+    doc.append_child(div, txt).unwrap();
+    assert_eq!(doc.set_attribute(txt, "x", "y"), Err(DomError::NotAnElement(txt)));
+}
+
+#[test]
+fn remove_attribute_on_text_node_returns_not_an_element() {
+    let mut doc = Document::new();
+    let div = doc.create_element("div");
+    doc.append_child(doc.root_id(), div).unwrap();
+    let txt = doc.create_text_node("hello");
+    doc.append_child(div, txt).unwrap();
+    assert_eq!(doc.remove_attribute(txt, "x"), Err(DomError::NotAnElement(txt)));
+}
+
+#[test]
+fn class_list_add_on_text_node_returns_not_an_element() {
+    let mut doc = Document::new();
+    let txt = doc.create_text_node("hello");
+    assert_eq!(doc.class_list_add(txt, "x"), Err(DomError::NotAnElement(txt)));
+}
+
+#[test]
+fn class_list_remove_on_text_node_returns_not_an_element() {
+    let mut doc = Document::new();
+    let txt = doc.create_text_node("hello");
+    assert_eq!(doc.class_list_remove(txt, "x"), Err(DomError::NotAnElement(txt)));
+}
+
+#[test]
+fn class_list_contains_on_text_node_returns_not_an_element() {
+    let mut doc = Document::new();
+    let txt = doc.create_text_node("hello");
+    assert_eq!(doc.class_list_contains(txt, "x"), Err(DomError::NotAnElement(txt)));
+}
+
+// These two are NEW behaviors (currently set_text_content/set_inner_html accept any node).
+#[test]
+fn set_text_content_on_text_node_returns_not_an_element() {
+    let mut doc = Document::new();
+    let div = doc.create_element("div");
+    doc.append_child(doc.root_id(), div).unwrap();
+    let txt = doc.create_text_node("hello");
+    doc.append_child(div, txt).unwrap();
+    assert_eq!(doc.set_text_content(txt, "new"), Err(DomError::NotAnElement(txt)));
+}
+
+#[test]
+fn set_inner_html_on_text_node_returns_not_an_element() {
+    let mut doc = Document::new();
+    let div = doc.create_element("div");
+    doc.append_child(doc.root_id(), div).unwrap();
+    let txt = doc.create_text_node("hello");
+    doc.append_child(div, txt).unwrap();
+    assert_eq!(doc.set_inner_html(txt, "<span>x</span>"), Err(DomError::NotAnElement(txt)));
+}
+
+// Item 4: HTML tag selectors are case-insensitive (html5ever stores tags lowercase;
+// a selector using uppercase letters must still match).
+#[test]
+fn selector_tag_case_insensitive() {
+    let doc = Document::parse("<DIV><IMG></IMG></DIV>");
+    // html5ever normalises to <div><img> internally
+    let divs = doc.query_selector_all("DIV");
+    assert!(!divs.is_empty(), "uppercase selector DIV should match lowercase div tag");
+    let imgs = doc.query_selector("DIV > IMG");
+    assert!(imgs.is_some(), "uppercase combinator DIV > IMG should match");
+}
+
+// Item 5: sentinel collision – input containing the sentinel close tag must not corrupt output.
+#[test]
+fn set_inner_html_sentinel_collision() {
+    let mut doc = Document::parse("<div></div>");
+    let div = doc.query_selector("div").unwrap();
+    // This html deliberately contains the default sentinel closing tag.
+    let evil = "<p>safe</p></x-frag-sentinel><p>after</p>";
+    doc.set_inner_html(div, evil).unwrap();
+    let inner = doc.get_inner_html(div).unwrap();
+    // Both paragraphs must appear; the sentinel must not leak into the output.
+    assert!(inner.contains("<p>safe</p>"), "first paragraph missing: {inner}");
+    assert!(inner.contains("<p>after</p>"), "second paragraph missing: {inner}");
+    assert!(!inner.contains("x-frag-sentinel"), "sentinel tag must not appear in output: {inner}");
+}
+
+// Item 6: query_selector returns the first element in document order (early-exit semantics).
+#[test]
+fn query_selector_returns_first_document_order() {
+    let doc = Document::parse("<div><p id=\"first\"></p><p id=\"second\"></p></div>");
+    let p = doc.query_selector("p").unwrap();
+    // The first <p> must be the one that appears first in document order.
+    assert_eq!(doc.get_attribute(p, "id"), Some("first".to_string()));
+}
+
+// Item 9: digit-leading identifiers in selector are rejected (produce no matches).
+#[test]
+fn selector_digit_leading_ident_produces_no_match() {
+    // Even if an element carries id="1bad", the selector #1bad must not match it.
+    let mut doc = Document::new();
+    let div = doc.create_element("div");
+    doc.append_child(doc.root_id(), div).unwrap();
+    doc.set_attribute(div, "id", "1bad").unwrap();
+    let hits = doc.query_selector_all("#1bad");
+    assert!(hits.is_empty(), "digit-leading id selector must produce no matches, got {hits:?}");
+}
+

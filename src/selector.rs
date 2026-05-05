@@ -75,6 +75,10 @@ impl Parser {
     }
 
     fn parse_ident(&mut self) -> String {
+        // CSS identifiers cannot start with a digit; return empty to signal rejection.
+        if matches!(self.peek(), Some(c) if c.is_ascii_digit()) {
+            return String::new();
+        }
         let mut s = String::new();
         while let Some(c) = self.peek() {
             if c.is_alphanumeric() || c == '-' || c == '_' {
@@ -157,7 +161,9 @@ impl Parser {
             Some(c) if c.is_alphabetic() => {
                 let t = self.parse_ident();
                 if !t.is_empty() {
-                    tag = Some(t);
+                    // Normalize to lowercase: html5ever stores tags lowercase; CSS tag
+                    // selectors are case-insensitive for HTML documents.
+                    tag = Some(t.to_ascii_lowercase());
                 }
             }
             _ => {}
@@ -410,6 +416,35 @@ pub(crate) fn query_all(arena: &Arena, root_id: u32, selector_str: &str) -> Vec<
     let mut results = Vec::new();
     collect_matches(arena, root_id, &group, &mut results);
     results
+}
+
+/// Walk the tree in document order and return the first element matching `selector_str`.
+///
+/// Exits the traversal as soon as a match is found, unlike `query_all`.
+pub(crate) fn query_first(arena: &Arena, root_id: u32, selector_str: &str) -> Option<u32> {
+    let group = parse_selector_group(selector_str);
+    if group.is_empty() {
+        return None;
+    }
+    find_first(arena, root_id, &group)
+}
+
+fn find_first(arena: &Arena, node_id: u32, group: &SelectorGroup) -> Option<u32> {
+    let (is_element, first_child) = match arena.get(node_id) {
+        Some(node) => (matches!(node.kind, NodeKind::Element { .. }), node.first_child),
+        None => return None,
+    };
+    if is_element && element_matches(arena, node_id, group) {
+        return Some(node_id);
+    }
+    let mut child = first_child;
+    while let Some(child_id) = child {
+        if let Some(found) = find_first(arena, child_id, group) {
+            return Some(found);
+        }
+        child = arena.get(child_id).and_then(|n| n.next_sibling);
+    }
+    None
 }
 
 // ── Unit tests ───────────────────────────────────────────────────────────────
