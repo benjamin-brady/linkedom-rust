@@ -54,7 +54,8 @@ impl Document {
         tree::children(&self.arena, node)
     }
 
-    /// Return the parent of `node`, or `None` if detached or root.
+    /// Return the parent of `node`, or `None` if the node is detached, is the root, or does not
+    /// exist in the arena.
     #[must_use]
     pub fn parent(&self, node: u32) -> Option<u32> {
         tree::parent_of(&self.arena, node)

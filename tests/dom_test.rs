@@ -1,6 +1,32 @@
 use linkedom_rust::{Document, DomError};
 
 #[test]
+fn append_child_invalid_parent_returns_error() {
+    let mut doc = Document::new();
+    let child = doc.create_element("div");
+    assert_eq!(doc.append_child(999, child), Err(DomError::InvalidNode(999)));
+}
+
+#[test]
+fn remove_invalid_id_returns_error() {
+    let mut doc = Document::new();
+    assert_eq!(doc.remove(999), Err(DomError::InvalidNode(999)));
+}
+
+#[test]
+fn remove_middle_child_stitches_siblings() {
+    let mut doc = Document::new();
+    let first = doc.create_element("first");
+    let middle = doc.create_element("middle");
+    let third = doc.create_element("third");
+    doc.append_child(doc.root_id(), first).unwrap();
+    doc.append_child(doc.root_id(), middle).unwrap();
+    doc.append_child(doc.root_id(), third).unwrap();
+    doc.remove(middle).unwrap();
+    assert_eq!(doc.children(doc.root_id()), Some(vec![first, third]));
+}
+
+#[test]
 fn creates_document_root() {
     let doc = Document::new();
     assert_eq!(doc.root_id(), 0);
