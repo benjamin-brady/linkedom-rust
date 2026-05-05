@@ -123,7 +123,10 @@ export function init(wasmPath?: string | URL): Promise<void> {
     const m = (await import('../pkg/linkedom_rust.js')) as IWasmModule;
     await m.default(wasmPath);
     _mod = m;
-  })();
+  })().catch((err) => {
+    _initPromise = null;
+    throw err;
+  });
   return _initPromise;
 }
 
