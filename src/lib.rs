@@ -1,5 +1,5 @@
-pub mod arena;
-pub mod node;
+mod arena;
+mod node;
 
 use arena::Arena;
 use node::NodeKind;
@@ -22,5 +22,11 @@ impl Document {
 
     pub fn node_count(&self) -> usize {
         self.arena.len()
+    }
+}
+
+impl Default for Document {
+    fn default() -> Self {
+        Self::new()
     }
 }

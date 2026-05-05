@@ -1,2 +1,5 @@
 
 .worktrees/
+target/
+# Library crate: Cargo.lock is not committed per Rust convention for libraries.
+Cargo.lock

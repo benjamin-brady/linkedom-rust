@@ -1,6 +1,9 @@
+// Node types define the DOM skeleton used in Task 2+; silence dead_code for now.
+#![allow(dead_code)]
+
 /// All possible node kinds stored in the arena.
 #[derive(Debug, Clone, PartialEq)]
-pub enum NodeKind {
+pub(crate) enum NodeKind {
     Document,
     DocumentType { name: String },
     Element { tag: String },
@@ -10,17 +13,17 @@ pub enum NodeKind {
 
 /// A single node in the arena.
 #[derive(Debug, Clone)]
-pub struct Node {
-    pub kind: NodeKind,
-    pub parent: Option<u32>,
-    pub first_child: Option<u32>,
-    pub last_child: Option<u32>,
-    pub next_sibling: Option<u32>,
-    pub prev_sibling: Option<u32>,
+pub(crate) struct Node {
+    pub(crate) kind: NodeKind,
+    pub(crate) parent: Option<u32>,
+    pub(crate) first_child: Option<u32>,
+    pub(crate) last_child: Option<u32>,
+    pub(crate) next_sibling: Option<u32>,
+    pub(crate) prev_sibling: Option<u32>,
 }
 
 impl Node {
-    pub fn new(kind: NodeKind) -> Self {
+    pub(crate) fn new(kind: NodeKind) -> Self {
         Self {
             kind,
             parent: None,
