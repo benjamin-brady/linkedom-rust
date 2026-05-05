@@ -40,6 +40,7 @@ impl WasmDocument {
     // ── Serialization ────────────────────────────────────────────────────────
 
     /// Serialize the document back to an HTML string.
+    #[wasm_bindgen(js_name = serialize)]
     pub fn serialize(&self) -> String {
         self.inner.serialize()
     }
@@ -73,14 +74,22 @@ impl WasmDocument {
     ///
     /// Throws a JavaScript string error for invalid ids or an attempt to remove
     /// the root.
+    #[wasm_bindgen(js_name = remove)]
     pub fn remove(&mut self, node: u32) -> Result<(), JsValue> {
         self.inner.remove(node).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
-    /// Return the ordered list of direct child ids of `node` as a `Uint32Array`.
+    /// Return the ordered list of **all** direct child ids of `node` as a `Uint32Array`.
+    ///
+    /// This includes element nodes, text nodes, comment nodes, etc. — analogous
+    /// to the browser's `childNodes` property rather than the element-only `children`.
     ///
     /// Returns an empty array for valid nodes with no children.
     /// Throws for invalid ids.
+    ///
+    /// **JavaScript name: `children`** — kept for backwards compatibility; callers
+    /// that expect only element children should filter the result themselves.
+    #[wasm_bindgen(js_name = children)]
     pub fn children(&self, node: u32) -> Result<Vec<u32>, JsValue> {
         self.inner
             .children(node)

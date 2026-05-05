@@ -80,7 +80,17 @@ interface IRawDocumentStatic {
 
 /** Shape of the module object returned by wasm-pack (`../pkg/linkedom_rust.js`). */
 interface IWasmModule {
-  default(input?: string | URL | BufferSource | WebAssembly.Module): Promise<void>;
+  /**
+   * The wasm-pack default export that initialises the WASM binary.
+   *
+   * The full wasm-bindgen signature also accepts `BufferSource` and
+   * `WebAssembly.Module`, but those require pre-fetched or pre-compiled bytes.
+   * We intentionally narrow to `string | URL` here because those are the only
+   * meaningful inputs when loading from a URL in a browser/Worker context.
+   * Callers that need `BufferSource` / `WebAssembly.Module` should call the
+   * raw module directly instead of going through this wrapper.
+   */
+  default(input?: string | URL): Promise<void>;
   WasmDocument: IRawDocumentStatic;
 }
 
@@ -89,23 +99,32 @@ interface IWasmModule {
 // ---------------------------------------------------------------------------
 
 let _mod: IWasmModule | null = null;
+/** Cached promise so that concurrent `init()` calls share a single load. */
+let _initPromise: Promise<void> | null = null;
 
 /**
  * Initialise the WASM module.  Must be called (and awaited) once before
  * creating any `Document` instances.
  *
+ * Concurrent callers receive the same promise so the binary is never
+ * fetched or compiled twice.
+ *
  * @param wasmPath  Optional explicit URL or path to the `.wasm` binary.
  *                  When omitted the URL embedded by wasm-pack is used.
  */
-export async function init(wasmPath?: string | URL): Promise<void> {
-  if (_mod !== null) return; // already initialised
+export function init(wasmPath?: string | URL): Promise<void> {
+  if (_mod !== null) return Promise.resolve();
+  if (_initPromise !== null) return _initPromise;
 
   // Dynamic import keeps the module Worker / ESM-friendly: bundlers can
   // tree-shake the wasm initialisation and Workers can control when the
   // module is loaded.
-  const m = (await import('../pkg/linkedom_rust.js')) as IWasmModule;
-  await m.default(wasmPath);
-  _mod = m;
+  _initPromise = (async () => {
+    const m = (await import('../pkg/linkedom_rust.js')) as IWasmModule;
+    await m.default(wasmPath);
+    _mod = m;
+  })();
+  return _initPromise;
 }
 
 function requireMod(): IWasmModule {
@@ -157,71 +176,92 @@ export class ClassList {
  * providing a DOM-like element API without exposing raw ids to consumers.
  */
 export class Element {
-  /** @internal */
-  readonly _nodeId: number;
-  /** @internal */
-  readonly _raw: IRawDocument;
+  readonly #raw: IRawDocument;
+  readonly #nodeId: number;
+
+  /**
+   * @internal – read the raw node id; only for same-module use by `Document`.
+   * This getter is read-only; the backing field cannot be mutated from outside.
+   */
+  get _nodeId(): number {
+    return this.#nodeId;
+  }
 
   /** @internal */
   constructor(raw: IRawDocument, nodeId: number) {
-    this._raw = raw;
-    this._nodeId = nodeId;
+    this.#raw = raw;
+    this.#nodeId = nodeId;
   }
 
   // ── Attributes ─────────────────────────────────────────────────────────
 
   getAttribute(name: string): string | undefined {
-    return this._raw.getAttribute(this._nodeId, name);
+    return this.#raw.getAttribute(this.#nodeId, name);
   }
 
   setAttribute(name: string, value: string): void {
-    this._raw.setAttribute(this._nodeId, name, value);
+    this.#raw.setAttribute(this.#nodeId, name, value);
   }
 
   removeAttribute(name: string): void {
-    this._raw.removeAttribute(this._nodeId, name);
+    this.#raw.removeAttribute(this.#nodeId, name);
   }
 
   // ── Text / HTML content ─────────────────────────────────────────────────
 
   get textContent(): string | undefined {
-    return this._raw.getTextContent(this._nodeId);
+    return this.#raw.getTextContent(this.#nodeId);
   }
 
   set textContent(value: string) {
-    this._raw.setTextContent(this._nodeId, value);
+    this.#raw.setTextContent(this.#nodeId, value);
   }
 
   get innerHTML(): string | undefined {
-    return this._raw.getInnerHtml(this._nodeId);
+    return this.#raw.getInnerHtml(this.#nodeId);
   }
 
   set innerHTML(value: string) {
-    this._raw.setInnerHtml(this._nodeId, value);
+    this.#raw.setInnerHtml(this.#nodeId, value);
   }
 
   // ── classList ───────────────────────────────────────────────────────────
 
   get classList(): ClassList {
-    return new ClassList(this._raw, this._nodeId);
+    return new ClassList(this.#raw, this.#nodeId);
   }
 
   // ── Tree ────────────────────────────────────────────────────────────────
 
-  /** Return direct children as `Element` instances. */
+  /**
+   * Return all direct child nodes as `Element` wrappers.
+   *
+   * **Note:** despite the name, this returns *all* child node types (text nodes,
+   * comment nodes, element nodes, …) — analogous to the browser's `childNodes`
+   * property rather than the element-only `children`.  An additive alias
+   * `childNodes` is provided below; prefer it in new code.
+   */
   get children(): Element[] {
-    const ids = this._raw.children(this._nodeId);
-    return Array.from(ids).map((id) => new Element(this._raw, id));
+    const ids = this.#raw.children(this.#nodeId);
+    return Array.from(ids).map((id) => new Element(this.#raw, id));
+  }
+
+  /**
+   * Alias for {@link children}.  Returns all direct child node wrappers
+   * (elements, text nodes, etc.) — equivalent to the browser's `childNodes`.
+   */
+  get childNodes(): Element[] {
+    return this.children;
   }
 
   /** Append `child` as the last child of this element. */
   append(child: Element): void {
-    this._raw.appendChild(this._nodeId, child._nodeId);
+    this.#raw.appendChild(this.#nodeId, child.#nodeId);
   }
 
   /** Detach this element from its parent. */
   remove(): void {
-    this._raw.remove(this._nodeId);
+    this.#raw.remove(this.#nodeId);
   }
 }
 
@@ -245,12 +285,11 @@ export class Element {
  * ```
  */
 export class Document {
-  /** @internal */
-  readonly _raw: IRawDocument;
+  readonly #raw: IRawDocument;
 
   /** @internal */
   private constructor(raw: IRawDocument) {
-    this._raw = raw;
+    this.#raw = raw;
   }
 
   // ── Construction ─────────────────────────────────────────────────────────
@@ -264,44 +303,51 @@ export class Document {
 
   /** Serialize the document to an HTML string. */
   serialize(): string {
-    return this._raw.serialize();
+    return this.#raw.serialize();
   }
 
   // ── Node factory ─────────────────────────────────────────────────────────
 
   /** Create a detached element with the given tag name. */
   createElement(tag: string): Element {
-    return new Element(this._raw, this._raw.createElement(tag));
+    return new Element(this.#raw, this.#raw.createElement(tag));
   }
 
-  /** Create a detached text node with the given content. */
+  /**
+   * Create a detached text node with the given content.
+   *
+   * **Return-type hazard:** the returned `Element` wrapper is a text node, not
+   * an element node.  Calling attribute methods (`getAttribute`, `setAttribute`,
+   * `classList`, …) on it will throw at the WASM boundary.  Only `textContent`,
+   * `append`, and `remove` are safe on a text-node wrapper.
+   */
   createTextNode(text: string): Element {
-    return new Element(this._raw, this._raw.createTextNode(text));
+    return new Element(this.#raw, this.#raw.createTextNode(text));
   }
 
   // ── Queries ───────────────────────────────────────────────────────────────
 
   /** Return the first element matching `selector`, or `undefined`. */
   querySelector(selector: string): Element | undefined {
-    const id = this._raw.querySelector(selector);
-    return id !== undefined ? new Element(this._raw, id) : undefined;
+    const id = this.#raw.querySelector(selector);
+    return id !== undefined ? new Element(this.#raw, id) : undefined;
   }
 
   /** Return all elements matching `selector` in document order. */
   querySelectorAll(selector: string): Element[] {
-    const ids = this._raw.querySelectorAll(selector);
-    return Array.from(ids).map((id) => new Element(this._raw, id));
+    const ids = this.#raw.querySelectorAll(selector);
+    return Array.from(ids).map((id) => new Element(this.#raw, id));
   }
 
   // ── Tree ─────────────────────────────────────────────────────────────────
 
   /** Append `child` as the last child of `parent`. */
   appendChild(parent: Element, child: Element): void {
-    this._raw.appendChild(parent._nodeId, child._nodeId);
+    this.#raw.appendChild(parent._nodeId, child._nodeId);
   }
 
   /** Detach `node` from its parent. */
   removeChild(node: Element): void {
-    this._raw.remove(node._nodeId);
+    this.#raw.remove(node._nodeId);
   }
 }

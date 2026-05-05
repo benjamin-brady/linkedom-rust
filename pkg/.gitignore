@@ -1,0 +1,12 @@
+# wasm-pack regenerates everything in this directory when you run:
+#   wasm-pack build .. --target web --out-dir ../pkg
+#
+# Ignore all generated artefacts so they are never committed.
+*.js
+*.wasm
+*_bg.wasm.d.ts
+package.json
+
+# Keep the hand-authored type stub that allows `npm run typecheck` to work
+# without a prior WASM build.
+!linkedom_rust.d.ts
