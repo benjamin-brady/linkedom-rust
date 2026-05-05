@@ -195,7 +195,11 @@ impl TreeSink for DomSink {
         let tag = name.local.as_ref().to_owned();
         let attrs_vec = attrs
             .iter()
-            .map(|a| (a.name.local.as_ref().to_owned(), a.value.to_string()))
+            .map(|a| {
+                // NOTE: Attribute namespaces are not stored yet, so SVG/MathML namespaced
+                // attributes may serialize without namespace prefix. Full namespace support is deferred.
+                (a.name.local.as_ref().to_owned(), a.value.to_string())
+            })
             .collect();
         let id = self
             .document
@@ -221,8 +225,8 @@ impl TreeSink for DomSink {
     }
 
     fn create_pi(&self, _target: StrTendril, _data: StrTendril) -> Self::Handle {
-        // Processing instructions are rare in HTML5 documents; fall back to an
-        // empty comment node so the tree structure is preserved without data loss.
+        // Processing instructions are not represented in our node model; create an empty
+        // comment as a placeholder to preserve tree structure. Full PI support is deferred.
         self.document
             .borrow_mut()
             .alloc_node(NodeKind::Comment { data: String::new() })
