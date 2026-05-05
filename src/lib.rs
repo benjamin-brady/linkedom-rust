@@ -230,7 +230,7 @@ impl Document {
     ///
     /// Wraps `html` in a temporary sentinel custom element, parses the full document,
     /// and copies the sentinel's children into `node`. The sentinel tag name is chosen
-    /// to avoid colliding with any close tag already present in `html`.
+    /// to avoid colliding with any opening or closing tag already present in `html`.
     ///
     /// # NOTE: arena growth
     ///
@@ -248,7 +248,7 @@ impl Document {
         for child_id in children {
             tree::remove_node(&mut self.arena, child_id, self.root)?;
         }
-        // Choose a sentinel tag that does not appear as a close tag in the input.
+        // Choose a sentinel tag that does not appear as an opening or closing tag in the input.
         let sentinel = pick_sentinel(html);
         let wrapped = format!("<{sentinel}>{html}</{sentinel}>");
         let frag_doc = parser::parse_html(&wrapped);
