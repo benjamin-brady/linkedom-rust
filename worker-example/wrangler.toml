@@ -1,0 +1,40 @@
+# Cloudflare Worker configuration for the linkedom-rust worker example.
+#
+# ASSUMPTIONS / PREREQUISITES
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. A successful `npm run build:wasm` (from the `js/` directory) has produced
+#    the WASM package under `../pkg/`.
+# 2. wrangler 3.x is installed globally: `npm install -g wrangler`.
+# 3. You are authenticated: `wrangler login`.
+#
+# LOCAL BLOCKER (as of current HEAD)
+# The `wasm32-unknown-unknown` stdlib is not available on the development
+# machine (Homebrew rustc, no rustup).  The WASM binary cannot be built yet,
+# so this Worker cannot be deployed or tested locally until the target is
+# installed.  See the README for instructions.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name = "linkedom-rust-worker"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# Use the ES module format required for Workers that import WASM.
+# This matches the `--target web` output of wasm-pack.
+# wrangler automatically handles `.wasm` file imports as WebAssembly.Module
+# when the `wasm_modules` rule is present.
+
+[[rules]]
+type   = "ESModule"
+globs  = ["**/*.js", "**/*.ts"]
+
+[[rules]]
+type  = "CompiledWasm"
+globs = ["**/*.wasm"]
+
+# The wasm-pack output is in ../pkg/ relative to the repo root.
+# When deploying, bundle the pkg/ directory alongside src/.
+# (Adjust the path if wasm-pack output dir changes.)
+#
+# No additional bindings (KV, D1, R2) are required for this example.
+# The Worker makes outbound `fetch()` calls to Wikipedia which are allowed
+# by default in the Cloudflare Workers runtime.
