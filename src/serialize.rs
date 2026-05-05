@@ -24,6 +24,25 @@ pub(crate) fn serialize_document(arena: &Arena, root_id: u32) -> String {
     out
 }
 
+/// Serialize all children of `node_id` and return the HTML string (innerHTML).
+/// Returns `None` if the node id is invalid.
+pub(crate) fn serialize_inner_html(arena: &Arena, node_id: u32) -> Option<String> {
+    let first_child = arena.get(node_id)?.first_child;
+    let mut out = String::new();
+    let mut cursor = first_child;
+    while let Some(child_id) = cursor {
+        serialize_node(arena, child_id, &mut out);
+        cursor = arena.get(child_id).and_then(|n| n.next_sibling);
+    }
+    Some(out)
+}
+
+/// Serialize a single node subtree into `out`.
+#[allow(dead_code)]
+pub(crate) fn serialize_subtree(arena: &Arena, node_id: u32, out: &mut String) {
+    serialize_node(arena, node_id, out);
+}
+
 fn serialize_node(arena: &Arena, id: u32, out: &mut String) {
     let (kind, first_child) = {
         let node = arena.get(id).expect("serialize_node: invalid id");

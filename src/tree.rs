@@ -11,6 +11,8 @@ pub enum DomError {
     CannotAppendRoot,
     /// The child node is already attached to a parent.
     AlreadyAttached,
+    /// The operation requires an element node, but the supplied node has a different kind.
+    NotAnElement(u32),
 }
 
 impl std::fmt::Display for DomError {
@@ -20,6 +22,7 @@ impl std::fmt::Display for DomError {
             DomError::CannotRemoveRoot => write!(f, "cannot remove the document root"),
             DomError::CannotAppendRoot => write!(f, "cannot append root as a child"),
             DomError::AlreadyAttached => write!(f, "child is already attached to a parent"),
+            DomError::NotAnElement(id) => write!(f, "node {id} is not an element"),
         }
     }
 }
