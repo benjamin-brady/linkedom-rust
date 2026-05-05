@@ -1,6 +1,7 @@
 use crate::node::{Node, NodeKind};
 
 /// Flat arena that owns all nodes, addressed by u32 index.
+#[derive(Debug)]
 pub(crate) struct Arena {
     nodes: Vec<Node>,
 }

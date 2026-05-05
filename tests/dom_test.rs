@@ -91,3 +91,38 @@ fn children_valid_empty_node_returns_some_empty() {
     let doc = Document::new();
     assert_eq!(doc.children(doc.root_id()), Some(vec![]));
 }
+
+// Characterization test: remove on an already-detached (but valid) node is a no-op,
+// matching browser `Node.remove()` semantics where calling remove on a node with no
+// parent is a no-op that succeeds silently.
+#[test]
+fn remove_detached_valid_node_is_noop() {
+    let mut doc = Document::new();
+    let div = doc.create_element("div");
+    // Never appended – already detached.
+    assert_eq!(doc.remove(div), Ok(()));
+    // Second call is also a no-op.
+    assert_eq!(doc.remove(div), Ok(()));
+}
+
+// Characterization test: removing a parent from the document detaches only the parent
+// from its own parent, leaving the parent's children intact as a detached subtree.
+// A child of the removed parent still reports the removed parent as its parent.
+#[test]
+fn remove_parent_preserves_children_as_detached_subtree() {
+    let mut doc = Document::new();
+    let parent = doc.create_element("div");
+    let child = doc.create_element("span");
+    doc.append_child(doc.root_id(), parent).unwrap();
+    doc.append_child(parent, child).unwrap();
+
+    doc.remove(parent).unwrap();
+
+    // Parent is detached from the document root.
+    assert_eq!(doc.parent(parent), None);
+    assert_eq!(doc.children(doc.root_id()), Some(vec![]));
+
+    // The subtree is preserved: child still knows its parent.
+    assert_eq!(doc.parent(child), Some(parent));
+    assert_eq!(doc.children(parent), Some(vec![child]));
+}

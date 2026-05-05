@@ -1,7 +1,7 @@
 use crate::arena::Arena;
 
 /// Errors returned by public tree-mutation methods.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum DomError {
     /// The supplied node id does not exist in the arena.
     InvalidNode(u32),
@@ -79,6 +79,19 @@ pub(crate) fn append_child(
 }
 
 /// Detach `node_id` from its parent and siblings in O(1).
+///
+/// # No-op on detached nodes
+///
+/// If `node_id` is already detached (has no parent), this function returns `Ok(())` and
+/// makes no structural changes. This matches browser `Node.remove()` semantics, where
+/// calling `remove()` on a node that has no parent is a silent no-op.
+///
+/// # Subtree preservation
+///
+/// Only the node itself is detached from its own parent; its children remain linked
+/// to it unchanged. After removal, the node and all its descendants form a
+/// self-consistent detached subtree. A child of the removed node will still report
+/// the removed node as its parent via `parent_of`.
 pub(crate) fn remove_node(
     arena: &mut Arena,
     node_id: u32,

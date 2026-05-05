@@ -6,6 +6,7 @@ use arena::Arena;
 use node::NodeKind;
 pub use tree::DomError;
 
+#[derive(Debug)]
 pub struct Document {
     arena: Arena,
     root: u32,
@@ -41,6 +42,17 @@ impl Document {
     }
 
     /// Detach `node` from its parent and siblings. O(1).
+    ///
+    /// # No-op on detached nodes
+    ///
+    /// If `node` is valid but has no parent (already detached), returns `Ok(())` unchanged.
+    /// This matches browser `Node.remove()` semantics.
+    ///
+    /// # Subtree preservation
+    ///
+    /// Only `node` is unlinked from its own parent. Its children remain attached to it,
+    /// forming a self-consistent detached subtree. A child of the removed node will still
+    /// report the removed node as its parent.
     pub fn remove(&mut self, node: u32) -> Result<(), DomError> {
         tree::remove_node(&mut self.arena, node, self.root)
     }
